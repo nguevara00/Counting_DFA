@@ -38,6 +38,11 @@ For an original string of length \(n=2m\), count strings of length \(m-1\) accep
 ### COMPONENT: Shared Counting Algorithm
 Inputs: DFA representation, n (the string length to count)
 Output: exact number of strings of length n accepted by the DFA
+- Create two arrays, prev and next, each containing one entry for every DFA state
+- Initialze prev[j] to 1 if state j is accepting, otherwise 0
+- for each length k from 1 to n, calculate: \[next[j]=\sum_{x=0}^{|\Sigma|-1}prev[\delta(j,x)]\]
+- after computing all states, copy next into prev
+- after n iterations, return prev[0]
 
 ### COMPONENT: Main
 1)Construct both DFAs (once).
@@ -89,4 +94,4 @@ Test the program against instructor provided test cases
 important things to remember -   
 There are two separate algorithms in this project.   
 The first constructs a DFA.  
-The second uses that DFA to count states.  
+The second uses that DFA to count accepted strings of a given length 
