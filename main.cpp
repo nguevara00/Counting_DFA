@@ -3,6 +3,8 @@
 #include <cassert>
 #include <iostream>
 #include <gmpxx.h>
+#include <limits>
+#include <algorithm> // for std::reverse()
 
 const int L2_BUFFER_STATES = 1365;
 const int L2_START_STATE = 0;
@@ -123,6 +125,114 @@ DFA buildDFA_L() {
     return dfa;
 }
 
+DFA buildDFA_L2(const DFA& dfaL) {
+    DFA dfa;
+
+    dfa.numStates = L2_NUM_STATES;
+    dfa.alphabetSize = 16;
+    dfa.startState = L2_START_STATE;
+
+    dfa.transition.resize(
+        dfa.numStates,
+        std::vector<int>(dfa.alphabetSize, L2_FAIL_STATE)
+    );
+
+    dfa.accepting.resize(dfa.numStates, true);
+    dfa.accepting[L2_FAIL_STATE] = false;
+
+    for (int symbol = 0; symbol < 16; symbol++) {
+        char leftChar = 'a' + symbol / 4;
+        char rightChar = 'a' + symbol % 4;
+
+        std::string leftBuffer = "a";
+        std::string rightBuffer = "a";
+
+        leftBuffer += leftChar;
+        rightBuffer += rightChar;
+
+        int leftState = encodeState(leftBuffer);
+        int rightState = encodeState(rightBuffer);
+
+        dfa.transition[L2_START_STATE][symbol] =
+            encodeProductState(leftState, rightState);
+    }
+
+    std::vector<std::string> buffers(L2_BUFFER_STATES);
+
+    for (int i = 0; i < L2_BUFFER_STATES; i++) {
+        buffers[i] = decodeState(i);
+    }
+
+    for (int leftState = 0; leftState < L2_BUFFER_STATES; leftState++) {
+        std::string leftBuffer = buffers[leftState];
+
+        for (int rightState = 0; rightState < L2_BUFFER_STATES; rightState++) {
+            std::string rightBuffer = buffers[rightState];
+
+            int state = encodeProductState(leftState, rightState);
+
+            if (leftBuffer.size() != rightBuffer.size() ||
+                leftBuffer.empty()) {
+                dfa.accepting[state] = false;
+                continue;
+            }
+
+            int length = leftBuffer.size();
+
+            if (length < 5 &&
+                (leftBuffer[0] != 'a' || rightBuffer[0] != 'a')) {
+                dfa.accepting[state] = false;
+                continue;
+            }
+
+            for (int symbol = 0; symbol < 16; symbol++) {
+                int leftSymbol = symbol / 4;
+                int rightSymbol = symbol % 4;
+
+                if (length < 5) {
+                    std::string updatedLeft = leftBuffer;
+                    std::string updatedRight = rightBuffer;
+
+                    updatedLeft += char('a' + leftSymbol);
+                    updatedRight += char('a' + rightSymbol);
+
+                    std::string fullString = updatedLeft;
+                    std::reverse(fullString.begin(), fullString.end());
+                    fullString += updatedRight;
+
+                    bool valid = true;
+
+                    for (std::size_t i = 0; i + 6 <= fullString.size(); i++) {
+                        if (!isValidSix(fullString.substr(i, 6))) {
+                            valid = false;
+                            break;
+                        }
+                    }
+
+                    if (valid) {
+                        int newLeft = encodeState(updatedLeft);
+                        int newRight = encodeState(updatedRight);
+
+                        dfa.transition[state][symbol] =
+                            encodeProductState(newLeft, newRight);
+                    }
+                }
+                else {
+                    int newLeft = dfaL.transition[leftState][leftSymbol];
+                    int newRight = dfaL.transition[rightState][rightSymbol];
+
+                    if (newLeft != 1365 && newRight != 1365) {
+                        dfa.transition[state][symbol] =
+                            encodeProductState(newLeft, newRight);
+                    }
+                }
+            }
+        }
+    }
+
+    return dfa;
+}
+
 //just think of mpz class as infinite integer
 mpz_class countAccepted(const DFA& dfa, int n) {
     std::vector<mpz_class> prev(dfa.numStates);
@@ -194,97 +304,81 @@ std::vector<mpz_class> countFromEveryState(const DFA& dfa, int n) {
 }
 */
 
-int main(){
-    DFA dfa = buildDFA_L();
-    /*
-    assert(dfa.numStates == 1366);
-    assert(dfa.alphabetSize == 4);
-    assert(dfa.startState == 0);
+int main() {
+    DFA dfaL = buildDFA_L();
+    DFA dfaL2 = buildDFA_L2(dfaL);
 
-    assert(dfa.transition[0][0] == encodeState("a"));
+    int choice;
+    int n;
 
-    assert(dfa.transition[encodeState("abcd")][0] ==
-        encodeState("abcda"));
+    while (true) {
+        std::cout << "\n====================================\n";
+        std::cout << "        DFA String Counter\n";
+        std::cout << "====================================\n";
+        std::cout << "1. Count strings in L\n";
+        std::cout << "2. Count strings in L'\n";
+        std::cout << "3. Quit\n";
+        std::cout << "Enter choice: ";
 
-    assert(dfa.transition[encodeState("abcda")][1] ==
-        encodeState("bcdab"));
+        if (!(std::cin >> choice)) {
+            if (std::cin.eof()) {
+                break;
+            }
 
-    assert(dfa.transition[encodeState("aaaaa")][0] == 1365);
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
-    for (int symbol = 0; symbol < 4; symbol++) {
-        assert(dfa.transition[1365][symbol] == 1365);
+            std::cout << "Invalid choice.\n";
+            continue;
+        }
+
+        if (choice == 3) {
+            std::cout << "Exiting program.\n";
+            break;
+        }
+
+        if (choice != 1 && choice != 2) {
+            std::cout << "Invalid choice.\n";
+            continue;
+        }
+
+        std::cout << "Enter string length (1-300): ";
+
+        if (!(std::cin >> n)) {
+            if (std::cin.eof()) {
+                break;
+            }
+
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+            std::cout << "Invalid length.\n";
+            continue;
+        }
+
+        if (n < 1 || n > 300) {
+            std::cout << "Length must be between 1 and 300.\n";
+            continue;
+        }
+
+        mpz_class result;
+
+        if (choice == 1) {
+            result = countAccepted(dfaL, n);
+        }
+        else {
+            if (n % 2 != 0) {
+                result = 0;
+            }
+            else {
+                int k = (n - 2) / 2;
+                result = countAccepted(dfaL2, k);
+            }
+        }
+
+        std::cout << "Number of accepted strings: "
+                  << result << std::endl;
     }
 
-    assert(dfa.accepting[0] == true);
-    assert(dfa.accepting[1365] == false);
-
-    std::cout << "DFA L tests passed." << std::endl;
-    */
-
-unsigned long expected[] = {
-    1, 4, 16, 64, 256, 1024,
-    1560, 4440, 12072, 31584, 81552
-};
-
-for (int n = 0; n <= 10; n++) {
-    mpz_class result = countAccepted(dfa, n);
-
-    assert(result == expected[n]);
-}
-
-assert(acceptsString(dfa, ""));
-assert(acceptsString(dfa, "aaaaa"));
-assert(!acceptsString(dfa, "aaaaaa"));
-
-assert(acceptsString(dfa, "abcdbc"));
-assert(acceptsString(dfa, "abcdabc"));
-assert(!acceptsString(dfa, "abcdbcd"));
-
-assert(acceptsString(dfa, "abcdabcd"));
-
-mpz_class result = countAccepted(dfa, 300);
-
-mpz_class upperBound = 1;
-
-for (int i = 0; i < 300; i++) {
-    upperBound *= 4;
-}
-
-assert(result >= 4);
-assert(result <= upperBound);
-
-assert(encodeProductState(0, 0) == 1);
-assert(encodeProductState(1, 1) == 1367);
-assert(encodeProductState(28, 30) == 38251);
-assert(encodeProductState(1364, 1364) == 1863225);
-
-bool passed = true;
-
-for (int state = 1; state < L2_FAIL_STATE; state++) {
-    int leftState;
-    int rightState;
-
-    decodeProductState(state, leftState, rightState);
-
-    int result = encodeProductState(leftState, rightState);
-
-    if (result != state) {
-        std::cout << "Test failed for state "
-                  << state << std::endl;
-        passed = false;
-        break;
-    }
-}
-
-if (passed) {
-    std::cout << "All L2 product-state encoding tests passed."
-              << std::endl;
-}
-
-std::cout << "Length 300 test passed." << std::endl;
-std::cout << "Accepted strings: " << result << std::endl;
-
-std::cout << "String acceptance tests passed." << std::endl;
-
-std::cout << "All counting tests passed." << std::endl;
+    return 0;
 }
