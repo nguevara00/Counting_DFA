@@ -4,6 +4,11 @@
 #include <iostream>
 #include <gmpxx.h>
 
+const int L2_BUFFER_STATES = 1365;
+const int L2_START_STATE = 0;
+const int L2_FAIL_STATE = 1 + L2_BUFFER_STATES * L2_BUFFER_STATES;
+const int L2_NUM_STATES = L2_FAIL_STATE + 1;
+
 struct DFA {
     int numStates;
     int alphabetSize;
@@ -53,6 +58,17 @@ std::string decodeState(int stateId) {
     }
 
     return buffer;
+}
+
+int encodeProductState(int leftState, int rightState) {
+    return 1 + L2_BUFFER_STATES * leftState + rightState;
+}
+
+void decodeProductState(int stateId, int& leftState, int& rightState) {
+    int value = stateId - 1;
+
+    leftState = value / L2_BUFFER_STATES;
+    rightState = value % L2_BUFFER_STATES;
 }
 
 bool isValidSix(const std::string& str) {
@@ -147,6 +163,36 @@ bool acceptsString(const DFA& dfa, const std::string& str) {
 
     return dfa.accepting[state];
 }
+/*
+std::vector<mpz_class> countFromEveryState(const DFA& dfa, int n) {
+    std::vector<mpz_class> prev(dfa.numStates);
+    std::vector<mpz_class> next(dfa.numStates);
+
+    for (int j = 0; j < dfa.numStates; j++) {
+        if (dfa.accepting[j]) {
+            prev[j] = 1;
+        }
+        else {
+            prev[j] = 0;
+        }
+    }
+
+    for (int k = 1; k <= n; k++) {
+        for (int j = 0; j < dfa.numStates; j++) {
+            next[j] = 0;
+
+            for (int x = 0; x < dfa.alphabetSize; x++) {
+                int destination = dfa.transition[j][x];
+                next[j] += prev[destination];
+            }
+        }
+
+        prev = next;
+    }
+
+    return prev;
+}
+*/
 
 int main(){
     DFA dfa = buildDFA_L();
@@ -206,6 +252,34 @@ for (int i = 0; i < 300; i++) {
 
 assert(result >= 4);
 assert(result <= upperBound);
+
+assert(encodeProductState(0, 0) == 1);
+assert(encodeProductState(1, 1) == 1367);
+assert(encodeProductState(28, 30) == 38251);
+assert(encodeProductState(1364, 1364) == 1863225);
+
+bool passed = true;
+
+for (int state = 1; state < L2_FAIL_STATE; state++) {
+    int leftState;
+    int rightState;
+
+    decodeProductState(state, leftState, rightState);
+
+    int result = encodeProductState(leftState, rightState);
+
+    if (result != state) {
+        std::cout << "Test failed for state "
+                  << state << std::endl;
+        passed = false;
+        break;
+    }
+}
+
+if (passed) {
+    std::cout << "All L2 product-state encoding tests passed."
+              << std::endl;
+}
 
 std::cout << "Length 300 test passed." << std::endl;
 std::cout << "Accepted strings: " << result << std::endl;
